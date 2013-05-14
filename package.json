@@ -1,6 +1,9 @@
 {
   "name": "rabbit",
   "version": "0.0.1",
+  "bin": {
+    "rabbit": "./bin/rabbit"
+  },
   "dependencies": {
     "jsdom": "~0.6.2",
     "knox": "~0.8.0",
