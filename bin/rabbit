@@ -1,6 +1,7 @@
 #!/usr/bin/env coffee
 
 optimist = require 'optimist'
+path = require 'path'
 Rabbit = require '../lib/rabbit'
 
 cwd = process.cwd()
@@ -36,7 +37,8 @@ try
 
 project = project || options.project
 bucket = bucket || options.bucket
+file = options.file || 'index.html'
 types = options.types || ['project']
 
-rabbit = new Rabbit { project, bucket, types, options }
+rabbit = new Rabbit { project, bucket, types, file, options }
 rabbit.prefetch()
