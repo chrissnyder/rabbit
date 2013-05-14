@@ -1,0 +1,42 @@
+#!/usr/bin/env coffee
+
+optimist = require 'optimist'
+Rabbit = require '../lib/rabbit'
+
+cwd = process.cwd()
+
+options = optimist.usage('''
+  Usage:
+    rabbit some-project some-bucket-name -fd
+''').options({
+  d: alias: 'data', description: 'Types of data to fetch. project and project_groups are available.'
+  f: alias: 'file', description: 'Path and filename of the html'
+  k: alias: 'key', description: 'AWS access key ID'
+  s: alias: 'secret', description: 'AWS secret access key'
+  c: alias: 'config', description: 'Configuration file'
+  h: alias: 'help', description: 'Show options'
+  v: alias: 'version', description: 'Show the version number'
+}).argv
+
+if options.help
+  optimist.showHelp()
+  process.exit 0
+
+if options.version
+  {name, version} = require '../package'
+  console.log "#{name} v#{version}"
+  process.exit 0
+
+try
+  config = require path.resolve cwd, options.config || 'rabbit'
+  options[option] = value for option, value of config when not (option of options)
+
+# Unpack command line arguments
+{_: [project, bucket]} = options
+
+project = project || options.project
+bucket = bucket || options.bucket
+types = options.types || ['project']
+
+rabbit = new Rabbit { project, bucket, types, options }
+rabbit.prefetch()
