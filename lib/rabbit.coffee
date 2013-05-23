@@ -3,7 +3,7 @@
 async = require 'async'
 jsdom = require 'jsdom'
 request = require 'request'
-Spooky = require 'spooky'
+phantom = require 'node-phantom'
 
 class Rabbit extends EventEmitter
 
@@ -47,27 +47,24 @@ class Rabbit extends EventEmitter
       save: ['insertData', @save]
 
   getHost: (callback) =>
-    spooky = new Spooky {
-        casper:
-          logLevel: 'debug'
-          verbose: true
-      }, (err) =>
-        spooky.on 'error', (err) ->
-          callback err, null
-        
-        spooky.on 'host-found', (@host) =>
-          callback null, @host
+    phantom.create (err, ph) =>
+      ph.createPage (err, page) =>
+        page.open @url(), (err, status) =>
+          if err
+            ph.exit()
+            callback err, null
+            return
 
-        spooky.start @_url() + "/#{ @file }"
+          page.evaluate ->
+            return window.zooniverse.Api.current.proxyFrame.host
+          , (err, @host) ->
+            ph.exit()
 
-        # There has to be a better way to do this.
-        spooky.thenEvaluate ->
-          window.zooHost = window.zooniverse.Api.current.proxyFrame.host
+            if err
+              callback err, null
+              return
 
-        spooky.then ->
-          @emit 'host-found', @getGlobal 'zooHost'
-
-        spooky.run()
+            callback null, @host
 
   getData: (callback) =>
     funcList = {}
