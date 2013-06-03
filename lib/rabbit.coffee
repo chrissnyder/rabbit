@@ -1,4 +1,5 @@
 {EventEmitter} = require 'events'
+url = require 'url'
 
 async = require 'async'
 jsdom = require 'jsdom'
@@ -6,15 +7,6 @@ request = require 'request'
 phantom = require 'node-phantom'
 
 class Rabbit extends EventEmitter
-
-  # Steps
-  # 1. find what environment the target is in
-  # 2. grab requested data from ouroboros
-  # 3. grab page html
-  # 4. Plop requested data onto page
-  # 5. Save html back to bucket
-  # 6. ...
-  # 7. profit
 
   project: ''
   bucket: ''
@@ -45,11 +37,16 @@ class Rabbit extends EventEmitter
       getHtml: ['getHost', @getHtml]
       insertData: ['getHtml', 'getData', @insertData]
       save: ['insertData', @save]
+    , (err) ->
+      if err?
+        console.log err
+
+      process.exit()
 
   getHost: (callback) =>
     phantom.create (err, ph) =>
       ph.createPage (err, page) =>
-        page.open @url(), (err, status) =>
+        page.open @bucketUrl(), (err, status) =>
           if err
             ph.exit()
             callback err, null
@@ -57,12 +54,17 @@ class Rabbit extends EventEmitter
 
           page.evaluate ->
             return window.zooniverse.Api.current.proxyFrame.host
-          , (err, @host) ->
+          , (err, @host) =>
             ph.exit()
 
             if err
               callback err, null
               return
+            else unless @host?
+              callback 'Failed to retrieve API host from page.', null
+              return
+            else unless url.parse @host
+              callback 'Host retrieved is invalid URI', null
 
             callback null, @host
 
@@ -72,7 +74,7 @@ class Rabbit extends EventEmitter
     for dataType in @types
       do (dataType) =>
         funcList[dataType] = (callback) =>
-          @_queryApi dataType, callback
+          @queryApi dataType, callback
 
     async.parallel funcList, (err, res) ->
       callback err, null if err
@@ -98,15 +100,15 @@ class Rabbit extends EventEmitter
 
       for key, datum of @dataResults
         keyId = key.replace '_', '-'
-        projectEl = document.querySelector "script#define-zooniverse-#{ keyId }"
+        datumEl = document.querySelector "script#define-zooniverse-#{ keyId }"
 
-        if projectEl?
-          projectEl.innerHTML = @_template key, datum
+        if datumEl?
+          datumEl.innerHTML = @template key, datum
         else
           scriptTag = document.createElement 'script'
           scriptTag.setAttribute 'type', 'text/javascript'
           scriptTag.id = "define-zooniverse-#{ keyId }"
-          scriptTag.innerHTML = @_template key, datum
+          scriptTag.innerHTML = @template key, datum
 
           firstScript = document.body.querySelector('script')
           document.body.insertBefore scriptTag, firstScript
@@ -124,28 +126,29 @@ class Rabbit extends EventEmitter
     @s3.putBuffer buffer, @file, headers, (err, res) ->
       callback null, res
 
-  _queryApi: (type, callback) =>
+  queryApi: (type, callback) =>
     dataTypes =
       project:
         endpoint: "/projects/#{ @project }"
       project_groups:
         endpoint: "/projects/#{ @project }/groups"
 
-    request.get @host + dataTypes[type].endpoint, (err, res, body) =>
+    requestUrl = url.resolve @host, dataTypes[type].endpoint
+    request.get requestUrl, { strictSSL: false }, (err, res, body) =>
       if not err and res.statusCode is 200
         @dataResults[type] = body
         callback null, @dataResults[type]
       else
         callback err, null
 
-  _template: (dataType, data) =>
+  template: (dataType, data) =>
     "window.DEFINE_ZOONIVERSE_#{ dataType.toUpperCase() } = #{ data }"  
 
-  _url: =>
+  bucketUrl: =>
     # Attempt to derive the url from the bucket
     if @bucket is 'zooniverse-demo'
-      "http://zooniverse-demo.s3-website-us-east-1.amazonaws.com"
+      url.resolve "http://zooniverse-demo.s3-website-us-east-1.amazonaws.com/", @file
     else
-      "http://#{ @bucket }"
+      url.resolve "http://#{ @bucket }", @file
 
 module.exports = Rabbit
