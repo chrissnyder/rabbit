@@ -10,6 +10,6 @@
     "request": "~2.21.0",
     "async": "~0.2.8",
     "optimist": "~0.4.0",
-    "node-phantom": "~0.2.3"
+    "node-phantom": "git://github.com/chrissnyder/node-phantom.git"
   }
 }
