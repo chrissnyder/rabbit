@@ -98,20 +98,24 @@ class Rabbit extends EventEmitter
 
       document = window.document
 
+      # Start fresh each time
+      dataEls = document.querySelectorAll "script[id^=define-zooniverse-]"
+      dataEls[i].parentNode.removeChild(dataEls[i]) for i in [0..dataEls.length - 1]
+
       for key, datum of @dataResults
         keyId = key.replace '_', '-'
-        datumEl = document.querySelector "script#define-zooniverse-#{ keyId }"
 
-        if datumEl?
-          datumEl.innerHTML = @template key, datum
-        else
-          scriptTag = document.createElement 'script'
-          scriptTag.setAttribute 'type', 'text/javascript'
-          scriptTag.id = "define-zooniverse-#{ keyId }"
-          scriptTag.innerHTML = @template key, datum
+        scriptTag = document.createElement 'script'
+        scriptTag.setAttribute 'type', 'text/javascript'
+        scriptTag.id = "define-zooniverse-#{ keyId }"
+        scriptTag.innerHTML = @template key, datum
 
-          firstScript = document.body.querySelector('script')
+        firstScript = document.body.querySelector('script')
+
+        if firstScript
           document.body.insertBefore scriptTag, firstScript
+        else
+          document.head.insertBefore scriptTag, document.head.firstChild
 
       @loadedHtml = document.documentElement.outerHTML
       callback null, @loadedHtml
