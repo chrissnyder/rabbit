@@ -1,4 +1,3 @@
-{EventEmitter} = require 'events'
 url = require 'url'
 
 async = require 'async'
@@ -6,7 +5,7 @@ jsdom = require 'jsdom'
 request = require 'request'
 phantom = require 'node-phantom'
 
-class Rabbit extends EventEmitter
+class Rabbit
 
   project: ''
   bucket: ''

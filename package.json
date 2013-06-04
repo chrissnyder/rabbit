@@ -1,6 +1,7 @@
 {
   "name": "rabbit",
   "version": "0.0.2",
+  "repository": "git://github.com/chrissnyder/rabbit.git",
   "bin": {
     "rabbit": "./bin/rabbit"
   },
