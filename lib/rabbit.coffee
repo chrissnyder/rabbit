@@ -1,71 +1,48 @@
-url = require 'url'
-
 async = require 'async'
+AWS = require 'aws-sdk'
 jsdom = require 'jsdom'
 request = require 'request'
-phantom = require 'node-phantom'
+url = require 'url'
 
 class Rabbit
 
   project: ''
   bucket: ''
+
+  host: 'https://api.zooniverse.org'
+
   file: 'index.html'
   types: ['project']
 
-  options: null
+  options: {}
 
   constructor: (params = {}) ->
     @[property] = value for own property, value of params when property of @
 
     # S3
-    @s3 = require('knox').createClient
-      key: @options.key || process.env.S3_ACCESS_ID
-      secret: @options.secret || process.env.S3_SECRET_KEY
-      bucket: @bucket
+    @s3 ?= new AWS.S3
+      accessKeyId: @options.key || process.env.AMAZON_ACCESS_KEY_ID
+      secretAccessKey: @options.secret || process.env.AMAZON_SECRET_ACCESS_KEY
+      region: @options.region || 'us-east-1'
 
     # To make the async part prettier
-    @host = ''
     @rawHtml = ''
     @dataResults = {}
     @loadedHtml = ''
 
-  prefetch: =>
+    @createEndpoints()
+
+  go: =>
     async.auto
-      getHost: @getHost
-      getData: ['getHost', @getData]
-      getHtml: ['getHost', @getHtml]
+      getData: @getData
+      getHtml: @getHtml
       insertData: ['getHtml', 'getData', @insertData]
       save: ['insertData', @save]
-    , (err) ->
+    , (err) =>
       if err?
         console.log err
 
-      process.exit()
-
-  getHost: (callback) =>
-    phantom.create (err, ph) =>
-      ph.createPage (err, page) =>
-        page.open @bucketUrl(), (err, status) =>
-          if err
-            ph.exit()
-            callback err, null
-            return
-
-          page.evaluate ->
-            return window.zooniverse.Api.current.proxyFrame.host
-          , (err, @host) =>
-            ph.exit()
-
-            if err
-              callback err, null
-              return
-            else unless @host?
-              callback 'Failed to retrieve API host from page.', null
-              return
-            else unless url.parse @host
-              callback 'Host retrieved is invalid URI', null
-
-            callback null, @host
+      console.log "Prefetched #{ @project }"
 
   getData: (callback) =>
     funcList = {}
@@ -76,30 +53,34 @@ class Rabbit
           @queryApi dataType, callback
 
     async.parallel funcList, (err, res) ->
-      callback err, null if err
-      callback null, res
+      if err
+        callback err, null
+      else
+        callback null, res
 
   getHtml: (callback) =>
-    @s3.getFile @file, (err, res) =>
-      callback err, null if err
+    @s3.getObject
+      Bucket: @bucket
+      Key: @file
+      (err, res) =>
+        if err
+          callback err, null
+          return
 
-      @rawHtml = ''
-
-      res.on 'data', (chunk) =>
-        @rawHtml += chunk
-
-      res.on 'end', =>
+        @rawHtml = res.Body.toString()
         callback null, @rawHtml
 
   insertData: (callback) =>
     jsdom.env @rawHtml, (err, window) =>
-      callback err, null if err
+      if err
+        callback err, null
+        return
 
       document = window.document
 
       # Start fresh each time
       dataEls = document.querySelectorAll "script[id^=define-zooniverse-]"
-      dataEls[i].parentNode.removeChild(dataEls[i]) for i in [0..dataEls.length - 1]
+      dataEls[i]?.parentNode.removeChild(dataEls[i]) for i in [0..dataEls.length - 1]
 
       for key, datum of @dataResults
         keyId = key.replace '_', '-'
@@ -122,21 +103,22 @@ class Rabbit
   save: (callback) =>
     buffer = new Buffer @loadedHtml
 
-    headers =
-      'x-amz-acl': 'public-read'
-      'Content-Type': 'text/html'
+    @s3.putObject
+      Bucket: @bucket
+      Key: @file
+      ACL: 'public-read'
+      Body: buffer
+      ContentType: 'text/html'
+      (err, res) ->
+        if err
+          callback err, null
+          return
 
-    @s3.putBuffer buffer, @file, headers, (err, res) ->
-      callback null, res
+        callback null, res
 
   queryApi: (type, callback) =>
-    dataTypes =
-      project:
-        endpoint: "/projects/#{ @project }"
-      project_groups:
-        endpoint: "/projects/#{ @project }/groups"
+    requestUrl = url.resolve @host, @endpoints[type].endpoint
 
-    requestUrl = url.resolve @host, dataTypes[type].endpoint
     request.get requestUrl, { strictSSL: false }, (err, res, body) =>
       if not err and res.statusCode is 200
         @dataResults[type] = body
@@ -153,5 +135,14 @@ class Rabbit
       url.resolve "http://zooniverse-demo.s3-website-us-east-1.amazonaws.com/", @file
     else
       url.resolve "http://#{ @bucket }", @file
+
+  createEndpoints: =>
+    # Short of somehow having a service that returns Ouroboros
+    # endpoints, I don't know how else to do this.
+    @endpoints =
+      project:
+        endpoint: "/projects/#{ @project }"
+      project_groups:
+        endpoint: "/projects/#{ @project }/groups"
 
 module.exports = Rabbit
