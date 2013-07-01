@@ -97,7 +97,7 @@ class Rabbit
         else
           document.head.insertBefore scriptTag, document.head.firstChild
 
-      @loadedHtml = document.documentElement.outerHTML
+      @loadedHtml = "<!DOCTYPE html>\n" + document.documentElement.outerHTML
       callback null, @loadedHtml
 
   save: (callback) =>
