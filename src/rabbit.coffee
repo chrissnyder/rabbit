@@ -79,7 +79,7 @@ class Rabbit
       document = window.document
 
       # Start fresh each time
-      dataEls = document.querySelectorAll "script[id^=define-zooniverse-]"
+      dataEls = document.querySelectorAll "script[id^=define-zooniverse-prefetch-]"
       dataEls[i]?.parentNode.removeChild(dataEls[i]) for i in [0..dataEls.length - 1]
 
       for key, datum of @dataResults
@@ -87,7 +87,7 @@ class Rabbit
 
         scriptTag = document.createElement 'script'
         scriptTag.setAttribute 'type', 'text/javascript'
-        scriptTag.id = "define-zooniverse-#{ keyId }"
+        scriptTag.id = "define-zooniverse-prefetch-#{ keyId }"
         scriptTag.innerHTML = @template key, datum
 
         firstScript = document.body.querySelector('script')
